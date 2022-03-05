@@ -170,7 +170,7 @@ https://xtls.github.io/development/protocols/muxcool.html#%E6%96%B0%E5%BB%BA%E5%
 
 然后 advance后，显然就是读这个端口和地址。读完端口地址后，后面接的就又是普通的 承载数据了.
 
-但是还是没读懂那个“4” 的判断。
+但是还是没读懂那个“4” 的判断。谁给这个数据写“4” 了？？似乎根本不在 xudp.go里。也许在其他位置有人写了4，也许rprx留了个坑，这个4是以防万一的东西。
 
 
 总之，sessionID似乎并不重要，重要的还是那个 buffer.UDP 这个  net.Destination。就是说，不知为何，只要指定 目标 UDP，如果ip+端口是与之前相同，那就会使用相同的端口发送。
