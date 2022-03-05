@@ -72,4 +72,26 @@ reader, writer 和 frame文件似乎比较重要，先看frame.go
 
 那么停一下，这里产生两个问题，buf.Buffer什么时候有“UDP”这一项了？这一项又是谁填充的？
 
+在v2ray的代码里可以明确，找不到UDP这一项。那么还是找commit记录，发现 这个commit https://github.com/XTLS/Xray-core/commit/8f8f7dd66f1c116d55feaafde38f4c008592a70a
+
+也就是说rprx在20年年底 就已经添加了这一项，目的是给 ss和 trojan添加udp支持
+
+这一项到底是谁填充的目前还不知道，需要继续阅读其它代码。
+
+然后frame.go 第125行，他加了一个Keep情况下的判断，果然，和我上面的推测吻合。
+
+接着看 writer.go, 在 writeMetaWithFrame 函数中，添加了如下代码：
+
+```go
+if len(data) == 1 {
+  frame.UDP = data[0].UDP
+}
+```
+显然，就是在这里填充的 UDP项。别看这变量叫frame，实际上还是 Buffer类型。
+这一段的意思是，如果 data这个 buf.MultiBuffer（即 `[]*Buffer`）里面实际上只有一段数据，而不是多段，那么，frame这个buffer的UDP项由 `data[0]` 的 UDP项决定。
+
+writeMetaWithFrame 由  Writer.writeData 调用，而它又由 Writer.WriteMultiBuffer 调用
+
+所以，给 WriteMultiBuffer 传入的数据如果实际只有一段，而且是UDP的，则 frame的UDP也被设为相同的值，然后 Writer.writer 会写入这个frame和 实际数据。
+
 
