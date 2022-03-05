@@ -219,7 +219,7 @@ ctx = session.ContextWithInbound(ctx, &session.Inbound{
 总之感觉没有完全看明白。。
 
 仔细思考，应该是说，inbound是针对有udp数据传到服务器的情况，显然不是用于我们的mux，而是ss这种可以有udp流量的情况。
-也就是说，ss、trojan这种可以发送udp的代理，上面确实已经证明可以是fullcone的了。但是 mux的部分我还是没有找到证据。
+也就是说，ss、socks5 这种可以发送udp的代理，上面确实已经证明可以是fullcone的了。但是 mux的部分我还是没有找到证据。
 
 关键点在于，mux中接到的实际上是 tcp流量，而向 freedom发送时却变成了udp； 而 ss这种用 udp发送过来的流量，直接就可以重用这个 udp端口接着直接用 freedom 向远程udp发送数据。
 
@@ -237,7 +237,9 @@ https://github.com/XTLS/Xray-core/blob/main/transport/internet/dialer.go
 
 问题是，如果客户端关了这个连接后，很久以后，比如一个小时以后，那 PacketConnWrapper肯定失效了，因为关闭了连接后，这个东西就没用了，被内存所回收。然后再次访问远程相同的udp端口的话，就会重新执行dial，此时的话，mux方法就会使用新的不同的端口进行通讯了，那么就不是fullcone了。
 
-这个行为就和ss或者trojan等的fullcone的实现不一样？因为那个是保存着ctx中的。不过感觉还是没读明白，有机会一定要完全解释清楚。
+这个行为就和ss的fullcone的实现不一样？因为ss那种原生就可以用udp传输的，原端口是保存着ctx中的，而且只要dial，就会通过 udpWorker把原端口保留在ctx中。不过感觉还是没读明白，有机会一定要完全解释清楚。
+
+总之本文中极可能蕴含着巨大错误啊，实在是搞不懂。
 
 # 总结
 
