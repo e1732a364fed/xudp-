@@ -237,6 +237,7 @@ https://github.com/XTLS/Xray-core/blob/main/transport/internet/dialer.go
 
 问题是，如果客户端关了这个连接后，很久以后，比如一个小时以后，那 PacketConnWrapper肯定失效了，因为关闭了连接后，这个东西就没用了，被内存所回收。然后再次访问远程相同的udp端口的话，就会重新执行dial，此时的话，mux方法就会使用新的不同的端口进行通讯了，那么就不是fullcone了。
 
+这个行为就和ss或者trojan等的fullcone的实现不一样？因为那个是保存着ctx中的。不过感觉还是没读明白，有机会一定要完全解释清楚。
 
 # 总结
 
