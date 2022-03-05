@@ -46,4 +46,19 @@ rprx说：
 
 rprx说他还改了 mux.cool，那我们应该去 common/mux 里查看
 
+这回还是走捷径，直接查看commit历史，发现这个commit： https://github.com/XTLS/Xray-core/commit/1174ff3090967489e9ac195f9e0db5bf344817be
+
+主要关注 
+
+common/mux 里的
+
+client.go, 
+frame.go, 
+reader.go, 
+server.go, 
+session.go, 
+writer.go, 
+
+和 core/xray.go 和 proxy/vless/outbound/outbound.go 
+
 
