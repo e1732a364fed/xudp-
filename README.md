@@ -220,3 +220,32 @@ ctx = session.ContextWithInbound(ctx, &session.Inbound{
 
 仔细思考，应该是说，inbound是针对有udp数据传到服务器的情况，显然不是用于我们的mux，而是ss这种可以有udp流量的情况。
 也就是说，ss、trojan这种可以发送udp的代理，上面确实已经证明可以是fullcone的了。但是 mux的部分我还是没有找到证据。
+
+关键点在于，mux中接到的实际上是 tcp流量，而向 freedom发送时却变成了udp； 而 ss这种用 udp发送过来的流量，直接就可以重用这个 udp端口接着直接用 freedom 向远程udp发送数据。
+
+然而，最新的 transport/internet/dialer.go 似乎和那个还不一样：
+
+https://github.com/XTLS/Xray-core/blob/main/transport/internet/dialer.go
+
+是用的 RegisterTransportDialer 的dialer，不过找来找去发现还是 DialSystem 的套壳，然后是 effectiveSystemDialer 套壳，然后是 transport/internet/system_dialer.go  的 DefaultSystemDialer 套壳。
+
+总之，也许如果没有源udp的端口的话，可能会在后面得到端口后什么位置把原端口写入了ctx？但是还是找不到。也就是说，mux方法的fullcone应该说是不持久的，重新dial的话应该就会得到不同的端口。
+
+## 关于NAT测试
+
+按理说，它是可以通过NAT测试得到fullcone的。关键就在于，它只dial了一遍。上文是始终没有找到dial多遍能使用原端口的证据；但是如果是dial一遍的话，后面紧接着的read或者write都是通过原本已经建立的conn来进行的（就是那个 PacketConnWrapper），当然就不会变换端口，测得的当然是fullcone
+
+问题是，如果客户端关了这个连接后，很久以后，比如一个小时以后，那 PacketConnWrapper肯定失效了，因为关闭了连接后，这个东西就没用了，被内存所回收。然后再次访问远程相同的udp端口的话，就会重新执行dial，此时的话，mux方法就会使用新的不同的端口进行通讯了，那么就不是fullcone了。
+
+
+# 总结
+
+本文的探索，不得不又陷入了小白探索v2ray代码的泥淖，
+
+下面的源码分析也提到过
+https://medium.com/@jarvisgally/v2ray-源代码分析-b4f8db55b0f6
+
+>使用上下文传递参数实际上是实现了一个参数可以随意变化的接口，对于V2Ray这种可拔插的组件架构，会导致代码难以阅读和维护，因为无法确定哪个组件对上下文中的参数做了哪些处理，往往只有运行时才能确定；初次接触项目的时候，经常会发现有参数从上下文中取出来了，但是一时半会找不到是在哪里写进去的，很容易迷失；此外，随着越来越多人加入项目，由于通过上下文传递参数是「方便」的途径，渐渐的就会加入各种奇奇怪怪的东西了。
+
+本文的探索，最后的源地址 似乎就是从 上下文提取出来的。
+
