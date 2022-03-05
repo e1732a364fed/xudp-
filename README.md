@@ -218,3 +218,5 @@ ctx = session.ContextWithInbound(ctx, &session.Inbound{
 
 总之感觉没有完全看明白。。
 
+仔细思考，应该是说，inbound是针对有udp数据传到服务器的情况，显然不是用于我们的mux，而是ss这种可以有udp流量的情况。
+也就是说，ss、trojan这种可以发送udp的代理，上面确实已经证明可以是fullcone的了。但是 mux的部分我还是没有找到证据。
