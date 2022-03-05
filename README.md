@@ -52,13 +52,24 @@ rprx说他还改了 mux.cool，那我们应该去 common/mux 里查看
 
 common/mux 里的
 
+```
 client.go, 
 frame.go, 
 reader.go, 
 server.go, 
 session.go, 
 writer.go, 
-
+```
 和 core/xray.go 和 proxy/vless/outbound/outbound.go 
+
+也就是说，xray的mux 包里所有的文件全修改了，全要看。
+
+client.go 只改了一行，先不看；server.go、session.go 同理。
+
+reader, writer 和 frame文件似乎比较重要，先看frame.go
+
+在 WriteTo 方法中，当 SessionStatus 不是 SessionStatusNew时（估计就是Keep吧），若b这个buf的UDP项不为空的情况下，写一个byte TargetNetworkUDP，然后写下该UDP项的地址和端口。
+
+那么停一下，这里产生两个问题，buf.Buffer什么时候有“UDP”这一项了？这一项又是谁填充的？
 
 
