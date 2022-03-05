@@ -170,4 +170,51 @@ https://xtls.github.io/development/protocols/muxcool.html#%E6%96%B0%E5%BB%BA%E5%
 
 然后 advance后，显然就是读这个端口和地址。读完端口地址后，后面接的就又是普通的 承载数据了.
 
+但是还是没读懂那个“4” 的判断。
+
+
+总之，sessionID似乎并不重要，重要的还是那个 buffer.UDP 这个  net.Destination。就是说，不知为何，只要指定 目标 UDP，如果ip+端口是与之前相同，那就会使用相同的端口发送。
+
+那么这个逻辑又是在哪里实现的呢？
+
+还是考虑上文提到的那个 给Buffer添加UDP项 那个 commit，https://github.com/XTLS/Xray-core/commit/8f8f7dd66f1c116d55feaafde38f4c008592a70a
+
+这个commit中，给ss和trojan添加了fullcone功能，说明肯定这里是关键。
+
+考察 proxy/freedom/freedom.go 文件
+
+
+再考察  transport/internet/system_dialer.go 文件的 ReadFrom 和 WriteTo
+
+发现 freedom里 ReadMultiBuffer 会使用 ReadFrom 函数， 而它会把读到的udp地址放到buffer中
+
+然后 WriteMultiBuffer 中，它会 用 WriteTo函数，来给指定的 b.UDP 的目标位置发送数据
+
+
+
+这里的关键是，如何记住第一次所使用的源端口呢？应该是 PacketConnWrapper
+
+这个乍一看，每次都会dial，每次都会拨号，但udp只有第一次 是直接拨号，而第二次拨号的话，实际上并没有拨号，而是直接用原来的连接，只要源端口一样就行
+
+dial第一次后，如果是udp，就会返回 PacketConnWrapper；
+
+第二次dial的话，它是会 根据src参数来返回之前所用过的，这是我目前的理解；
+
+然后src参数谁给的呢？似乎是 transport/internet/dialer.go 的 DialSystem 中，利用 ctx 中存储的 outbound.Gateway 来 获取到 src 地址
+
+而这个Gateway 似乎又是 app/proxyman/inbound/worker.go  的 udpWorker.callback 里 如下代码创建的：
+
+```
+ctx = session.ContextWithInbound(ctx, &session.Inbound{
+	Source:  source,
+	Gateway: net.UDPDestination(w.address, w.port),
+	Tag:     w.tag,
+})
+```
+
+总之，错综复杂啊，很多地方我都可能搞错了，比如这里为什么时inbound而不是outbound
+
+无论怎样，它可能 是想办法利用 ctx中存储的 原地址的值 读取到了原来的dialer，然后dial出来的就直接是 原来的 PacketConnWrapper？
+
+总之感觉没有完全看明白。。
 
