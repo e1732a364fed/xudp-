@@ -23,7 +23,12 @@ xudp到底什么原理？
 rprx说：
 >扩展 Mux.Cool 协议 Keep 的元数据，使其像 New 一样带上 UDP 端口和地址信息，为方便交流，扩展后的协议命名为 XUDP。
 
+
+## 代码分析
+
 那么我们看看它的代码实现
+
+### xudp
 
 首先看xudp的代码 https://github.com/XTLS/Xray-core/blob/bf94fb53caf61244abeb031a6088566290702a0d/common/xudp/xudp.go
 
@@ -31,9 +36,9 @@ rprx说：
 
 在第54行前，前面先写了4个字节的0，然后对 新旧数据分别使用New和 Keep格式，但是注意
 
-而55-60行是什么意思？56、57行 是把消息的头部长度存放到1、2字节中，58、59行 是把承载数据的长度放到 3、4字节中，然后把数据写在后面。
+而55-60行是什么意思？56、57行 是把消息的头部长度存放到1、2字节中，58、59行 是把承载数据的长度放到 请求头末尾，然后把数据写在后面。
 
-似乎还是没有特殊的
+似乎还是没有特殊的东东。
 
 
 然后观察 ReadMultiBuffer 方法
@@ -42,7 +47,13 @@ rprx说：
 
 然后就有点奇怪，它读取剩余部分的 “第三个字节” （`b.Byte(2) `), 然后对它判断2或者4。但是承载数据的长度怎么会是2或者4呢？？
 
-显然，似乎承载数据的 内容 的设置，并不是在 xudp.go 文件中
+先往下看，发现 `b.Advance(5)` 这个东西，不难猜出，它是跳过了前面一段数据，读取里面蕴含的 端口信息， 并给b的UDP项赋值。
+
+然后“第四个字节” 为1时，接着读取一遍数据，这个感觉也有待呢看不懂
+
+
+
+### common/mux 和 outbound
 
 rprx说他还改了 mux.cool，那我们应该去 common/mux 里查看
 
@@ -62,7 +73,7 @@ writer.go,
 ```
 和 core/xray.go 和 proxy/vless/outbound/outbound.go 
 
-也就是说，xray的mux 包里所有的文件全修改了，全要看。
+也就是说，xray的mux 包里所有的文件全修改了，全要看。xray.go里面只不过是删除一大段而已，似乎不重要.
 
 client.go 只改了一行，先不看；server.go、session.go 同理。
 
@@ -90,8 +101,73 @@ if len(data) == 1 {
 显然，就是在这里填充的 UDP项。别看这变量叫frame，实际上还是 Buffer类型。
 这一段的意思是，如果 data这个 buf.MultiBuffer（即 `[]*Buffer`）里面实际上只有一段数据，而不是多段，那么，frame这个buffer的UDP项由 `data[0]` 的 UDP项决定。
 
-writeMetaWithFrame 由  Writer.writeData 调用，而它又由 Writer.WriteMultiBuffer 调用
+writeMetaWithFrame 由  Writer.writeData 调用，而它又由 Writer.WriteMultiBuffer 调用。
 
 所以，给 WriteMultiBuffer 传入的数据如果实际只有一段，而且是UDP的，则 frame的UDP也被设为相同的值，然后 Writer.writer 会写入这个frame和 实际数据。
+
+然后再看reader.go ，这个 reader.go就比较有意思了，他首先把 NewPacketReader 的签名变成 `(reader io.Reader, dest *net.Destination)`, 
+也就是说，在read执行之前就是已经知道目的地的地址了，然后在 ReadMultiBuffer 里，当使用udp时，就会把读取到的数据 的这个 buffer也添加一个 UDP项。
+
+然后session.go里的变化就明白了，因为它 在NewReader里 传递进了目标地址，然后调用了 NewPacketReader 。
+然后server.go里的变化就明白了，因为它就是在 ServerWorker.handleStatusKeep 和 handleStatusNew 方法中，调用 Session.NewReader。
+
+这一切都不够，还要继续阅读。
+
+下面观察 proxy/vless/outbound/outbound.go ，
+首先要明确的是 outbound是用于客户端的，就是说客户端向服务器发送请求时所发送的包。
+
+在第179行，在command为udp时，且 端口不是53（dns）也不是443（https），且 h.cone 时，把 request.Command 从 udp修改为 mux，域名改为和正常mux的域名一致，端口改为666.
+
+因此在此就可以确认，xray的fullcone使用的是udp的666端口
+
+然后在195行，判断端口为666且command为mux时，采用 xudp.NewPacketWriter。
+
+然后就没了。等等，咋没了呢，我还是没搞懂，咋就实现了fullcone呢。
+
+那么重新捋一捋。
+
+啥是fullcone？ fullcone就是，每次客户端向服务端的同一个端口发送udp数据，都要使用同一个客户端端口。就这么简单。
+
+那么，只要 xray的服务端 在接收到 之前 发送过的目标端口 的数据 的 第二个数据包时（即Keep中的数据），要使用之前发送第一个数据包 所使用的端口（即发送New数据到远程服务器时所用的端口）
+
+那它真的做到了吗？
+
+首先回到mux的代码，因为此时mux就充当了客户端。 server.go 中 handleStatusKeep 中，在Get一个Session后，会读取请求的数据，然后发送到远端（s.output) 
+
+而这个Get的Session是在 handleStatusNew 里存放的。output项是 link.Writer， 而 `link, err := w.dispatcher.Dispatch(ctx, meta.Target)`
+
+然后 `w.dispatcher 是 routing.Dispatcher`, routing.Dispatcher 是一个 interface，而 `app/dispatcher/default.go`里的 DefaultDispatcher 显然就是一个实现
+
+不过里面似乎没有什么有效信息。总之，目前的理解就是，handleStatusKeep 中 所存放的那个 Session 的 output 应该是原来的output，所以端口自然也是原来的端口，理由是 udp在建立连接后，所使用的端口是固定的。
+
+所以，关键点就是 meta.SessionID，而meta是 FrameMetadata，是直接 读取 ServerWorker.link.Reader 的。 重新查看 frame.go , 看到
+
+```go
+type FrameMetadata struct {
+	Target        net.Destination
+	SessionID     uint16
+	Option        bitmask.Byte
+	SessionStatus SessionStatus
+}
+```
+
+
+而这个 SessionID 被 writer.go的 NewResponseWriter 里 的id 赋值，感觉又循环了，到底谁给 SessionID 赋值的？
+
+思来想去，感觉是和 xudp有关。向mux的server发送数据的只能是 xudp.NewPacketWriter 的 WriteMultiBuffer 函数
+
+重新查看mux.cool 协议，
+https://xtls.github.io/development/protocols/muxcool.html#%E6%96%B0%E5%BB%BA%E5%AD%90%E8%BF%9E%E6%8E%A5-new
+
+发现原本Keep超简单，就是 0x2, 然后一个数据。同时我们也看到，Keepalive是 0x4
+
+重新查看 xudp.go，就不难理解了，它查看“第三个字节”，是因为前两个字节是数据段的长度，第三个字节表示 New、Keep或者KeepAlive。所以这里的2和4又是魔数，真实差评啊。
+
+然后就发现，它根本就没设置session ID，即预留的四个字节中，只设置了前两位的长度，第3、4位数空的；然后Keep数据本来 这四个字节后面就应该马上连接承载数据，而rprx在中间插了一段，即xudp中第51行所做的事情，
+先放了一个2，然后放进去了端口和地址
+
+然后第97行的“第三字节”的判断就豁然开朗了，因为前面先读了长度，所以现在的“第1、2字节” 就是原来的sessionID项，因为留空 就直接跳过了，然后这个“第三字节”就是在Keep中特别设置好的“2”，
+
+然后 advance后，显然就是读这个端口和地址。读完端口地址后，后面接的就又是普通的 承载数据了.
 
 
