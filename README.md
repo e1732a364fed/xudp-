@@ -256,6 +256,14 @@ fullcone解决什么问题？打洞问题。即所谓客户端当做游戏服务
 
 重中之重是什么，为什么我一再探究这个区别？实际上是因为，我已经想到了在udp over tcp中可以保持状态的办法，实现全然与rprx的方法不同，所以当然有必要先指出不同办法的必要性，即解决上述问题。
 
+## sagernet版 v2ray也采用了 fullcone
+
+它直接把xray代码和v2ray代码杂糅在了一起
+见
+相关sagernet的commit在 https://github.com/SagerNet/v2ray-core/commit/dbad7b0ce458675aea08c5eed772dd36a6a463d6
+
+22年1月新添加的这个commit。
+
 # 后记
 
 本文的探索，不得不又陷入了小白探索v2ray代码的泥淖，
