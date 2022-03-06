@@ -24,6 +24,14 @@ rprx说：
 >扩展 Mux.Cool 协议 Keep 的元数据，使其像 New 一样带上 UDP 端口和地址信息，为方便交流，扩展后的协议命名为 XUDP。
 
 
+总之，之所以ss、socks5能fullcone，是因为它们都可以直接传输在udp上；而且socsk5就算传输在tcp上，因为协议厉害，也是可以传输udp的fullcone的。trojan和socks5类似。
+
+实际上trojan就相当于一个更防探测 的socks5.
+
+然后就差vless和vmess，因为协议限制，传输数据时并不附带地址，也就是说是设计时就没搞好，所以正常情况不行。而xray的方法就是利用mux协议来做到，绕过vless。
+
+所以实际上没有加强vless、vmess，只不过是绕过了它们，改用新协议而已。
+
 ## 代码分析
 
 那么我们看看它的代码实现
