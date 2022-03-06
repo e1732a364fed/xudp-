@@ -130,6 +130,8 @@ writeMetaWithFrame 由  Writer.writeData 调用，而它又由 Writer.WriteMulti
 
 然后在195行，判断端口为666且command为mux时，采用 xudp.NewPacketWriter。
 
+这里的outbound实际上的行为就是，你虽然说vless拨号，但是我这里硬把你改成了mux拨号，所以实际上发送出去的流量是mux格式，和vless毫无关系（vmess的也是一样的）；或者说vless里套了一个mux协议，所以，低级协议可以通过内含高级协议来进行扩展。
+
 然后就没了。等等，咋没了呢，我还是没搞懂，咋就实现了fullcone呢。
 
 那么重新捋一捋。
